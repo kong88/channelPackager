@@ -1,0 +1,272 @@
+package com.umeng.editor
+
+import com.umeng.editor.decode.AXMLDoc
+
+import java.security.MessageDigest
+
+/**
+ * Created by wisly on 2016/6/28.
+ */
+public class PackageUtil {
+
+    private final static String UNZIP_DIR = "/vipshop";
+    private final static String TEMP_APK = "/temp.apk";
+    private final static String MANIFEST_FILE = "/AndroidManifest.xml";
+    private final static String META_INF_DIR = "/META-INF";
+
+    static class FlavorModule {
+        String flavorName
+        String channelName
+        String channelValue
+    }
+
+    private static void printResult(String result, boolean failed) {
+        if (failed) {
+            println(">>>>>>>>>>>>>>> " + result + " OK");
+        } else {
+            println("!!!!!!!!!!!!!!! " + result + "Failed");
+        }
+    }
+
+    // command: cp $srcPath $destPath
+    private static boolean copyFile(String srcPath, String destPath) {
+        def cmd = "cp " + srcPath + " " + destPath;
+        def proc = cmd.execute();
+        proc.waitFor();
+        println proc.getText();
+        boolean result = proc.exitValue() == 0;
+        proc.destroy();
+        printResult("copyFile", result);
+        return result;
+    }
+
+    // command: 7z e $apkPath -o$unZipPath Manifest.xml
+    private static boolean unzipManifest(String apkPath, String unzipPath) {
+        def cmd = "7z e " + apkPath + " -o" + unzipPath + " AndroidManifest.xml";
+        def proc = cmd.execute();
+        proc.waitFor();  // 用以等待外部进程调用结束
+        println proc.getText();
+        boolean result = proc.exitValue() == 0;
+        proc.destroy();
+        printResult("unzipManifest", result);
+        return result;
+    }
+
+    // command: 7z d $apkPath [files]
+    private static boolean deleFromApk(String apkPath) {
+        def cmd = "7z d " + apkPath + " META-INF AndroidManifest.xml -r"
+        def proc = cmd.execute();
+        proc.waitFor();
+        println proc.getText();
+        boolean result = proc.exitValue() == 0;
+        proc.destroy();
+        printResult("deleFromApk", result);
+        return result;
+    }
+
+    // command: 7z a $apkPath $filePath
+    private static boolean addToApk(String apkPath, String filePath) {
+        if (!(filePath.contains(":") || filePath.startsWith("/") || filePath.startsWith("./"))) {
+            filePath = "./" + filePath; // 修正相对路径
+        }
+        def cmd = "7z a " + apkPath + " " + filePath;
+        def proc = cmd.execute();
+        proc.waitFor();
+        println proc.getText();
+        boolean result = proc.exitValue() == 0;
+        proc.destroy();
+        printResult("addToApk " + filePath, result);
+        return result;
+    }
+
+    private static String encoderByMd5(String str) {
+        try {
+            MessageDigest md5 = MessageDigest.getInstance("md5");
+            md5.update(str.getBytes());
+            byte[] bts = md5.digest();
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < bts.length; i++) {
+                String tmp = (Integer.toHexString(bts[i] & 0xFF));
+                if (tmp.length() == 1) {
+                    sb.append('0');
+                }
+                sb.append(tmp);
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return str;
+        }
+    }
+
+    static boolean modifyManifestFile(String inputPath, String channelName, String channelValue, String outputPath) {
+        try {
+            AXMLDoc doc = new AXMLDoc();
+            doc.parse(new FileInputStream(inputPath));
+            // doc.print();
+
+            ChannelEditor2 editor = new ChannelEditor2(doc);
+            editor.setChannel(channelName);
+            editor.setCPS_ID(channelValue);
+            editor.commit();
+
+            doc.build(new FileOutputStream(outputPath));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+        printResult("modifyManifestFile", true);
+        return true;
+    }
+
+    private static boolean writeChannelFile(String path, String channelName, String channelValue) {
+        File file = new File(path);
+        if (file.exists()) {
+            file.deleteDir();
+        }
+        file.mkdirs();
+
+        File channelFile = new File(path + "/vipchannel.txt");
+        channelFile.createNewFile();
+        channelFile.write(channelName + "," + channelValue, "utf-8");
+        printResult("writeChannelFile", true);
+        return true;
+    }
+
+    private static Map<String, FlavorModule> getChannels(String channelFilePath) {
+        Map<String, FlavorModule> channelsAll = new HashMap<String, FlavorModule>();
+        // 渠道号配置文件路径
+        int i = 0;
+        File file = new File(channelFilePath);
+        file.eachLine { line ->
+            if (!line.startsWith("//")) { //剔除注释行
+                String[] channel = line.split(",")
+
+                if (channel.length == 3) {
+                    i++
+                    println("--------------------" + i + " " + line)
+                    FlavorModule module = new FlavorModule()
+                    module.flavorName = channel[0]
+                    module.channelName = channel[1]
+                    module.channelValue = channel[2]
+                    channelsAll.put("${module.flavorName}", module)
+                } else if (channel.length == 2) {
+                    i++
+                    println("--------------------" + i + " " + line)
+                    FlavorModule module = new FlavorModule()
+                    module.flavorName = 'favername' + i
+                    module.channelName = channel[0]
+                    module.channelValue = channel[1]
+                    channelsAll.put("${module.flavorName}", module)
+                }
+            }
+        }
+        return channelsAll
+    }
+
+    private static void clearFiles(String baseDir) {
+        File file = new File(baseDir + UNZIP_DIR);
+        if (file.exists()) {
+            file.deleteDir();
+        }
+        file = new File(baseDir + TEMP_APK);
+        if (file.exists()) {
+            file.delete();
+        }
+        file = new File(baseDir + META_INF_DIR);
+        if (file.exists()) {
+            file.deleteDir();
+        }
+        file = new File(baseDir + MANIFEST_FILE);
+        if (file.exists()) {
+            file.delete();
+        }
+    }
+
+    /**
+     * Main
+     */
+    public static void channelPackage(String baseDir, String apkName, String channelFile, String versionName,
+                                      boolean batchMode) {
+
+        String unzipDir = baseDir + UNZIP_DIR;
+        String apkPath = baseDir + TEMP_APK;
+        boolean result = copyFile(baseDir + "/" + apkName, apkPath);
+        if (result) {
+            result = unzipManifest(apkPath, unzipDir);
+        }
+        if (result) {
+            result = deleFromApk(apkPath);
+        }
+
+        if (result) {
+            List<FlavorModule> flavorList = new ArrayList<FlavorModule>();
+            File file = new File(baseDir + "/apk");
+            if (file.exists()) {
+                file.deleteDir();
+            }
+            file.mkdirs();
+
+            Map<String, FlavorModule> channelsAll = getChannels(channelFile);
+            channelsAll.each {
+                String flavorName = it.getKey();
+                String channelName = it.value.channelName;
+                String channelValue = it.value.channelValue;
+                String flavor = channelName;
+                try {
+                    flavor = "vipshop_" + flavorName + "_" + versionName + "_" + new Date().format("yyyy-MM-dd", TimeZone.getTimeZone("UTC"));
+                    if (batchMode) {
+                        String apkPartName;
+                        try {
+                            apkPartName = apkName.substring(0, apkName.lastIndexOf("-"))
+                            apkPartName = apkPartName.substring(apkPartName.indexOf("8."))
+                            apkPartName = apkPartName.substring(0, apkPartName.indexOf("_"));
+                        } catch (Exception e) {
+                            apkPartName = versionName;
+                        }
+                        flavor = "shop_android_" + encoderByMd5(channelValue) + "_" + apkPartName;
+                        FlavorModule temp = new FlavorModule();
+                        temp.channelName = channelName;
+                        temp.channelValue = channelValue;
+                        temp.flavorName = flavor;
+                        flavorList.add(temp)
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+
+                result = modifyManifestFile(unzipDir + MANIFEST_FILE, channelName, channelValue, baseDir + MANIFEST_FILE);
+                if (result) {
+                    result = writeChannelFile(baseDir + META_INF_DIR, channelName, channelValue);
+                }
+                if (result) {
+                    boolean add1Ok = addToApk(apkPath, baseDir + MANIFEST_FILE);
+                    boolean add2Ok = addToApk(apkPath, baseDir + META_INF_DIR);
+                    result = add1Ok && add2Ok;
+                }
+                if (result) {
+                    result = Signe.signe(baseDir + "/android.keystore", baseDir + "/apk/" + flavor + ".apk", apkPath);
+                    printResult("signature", result)
+                }
+            }
+
+            if (batchMode) {
+                File fMarkApkChannelValue = new File(baseDir + "/apk/apk_updateChannels.txt");
+                if (!fMarkApkChannelValue.exists()) {
+                    fMarkApkChannelValue.createNewFile();
+                } else {
+                    fMarkApkChannelValue.deleteDir();
+                    fMarkApkChannelValue.createNewFile();
+                }
+
+                def printWriter = fMarkApkChannelValue.newPrintWriter();
+                for (int i = 0; i < flavorList.size(); i++) {
+                    printWriter.println(flavorList.get(i).channelName + "," + flavorList.get(i).channelValue + "," + flavorList.get(i).flavorName + ".apk");
+                }
+                printWriter.flush();
+                printWriter.close();
+            }
+        }
+
+        clearFiles(baseDir)
+    }
+}

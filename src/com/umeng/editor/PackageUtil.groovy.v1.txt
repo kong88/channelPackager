@@ -1,0 +1,315 @@
+package com.umeng.editor
+
+import com.umeng.editor.decode.AXMLDoc
+
+import java.security.MessageDigest
+/**
+ * Created by wisly on 2016/6/28.
+ */
+public  class PackageUtil {
+
+
+
+    class FaverModule {
+        String faverName
+        String channelName
+        String channelValue
+    }
+
+    public boolean unzipapk(String apkpath,unzipDirpath){
+        File file = new File(unzipDirpath);
+        if (file.exists()) {
+            boolean deleteOk = file.deleteDir();
+            println("--------------------unzipapk deleteOk=" + deleteOk);
+        }
+        def cmd ="7z x "+apkpath+" -y -aos -o"+unzipDirpath;
+        def proc =cmd.execute()
+        proc.waitFor()  // 用以等待外部进程调用结束
+        String str=proc.getText();
+        println str
+        if(proc.exitValue()==0){
+            println  "unzipapk OK"
+            proc.destroy()
+            return true
+        }else{
+            proc.destroy()
+            return false
+        }
+    }
+
+    public boolean changeManifestWithChannel(String inputpath,String channelName,String channelValue,String outputPath){
+
+        try{
+            AXMLDoc doc = new AXMLDoc();
+            doc.parse(new FileInputStream(inputpath));
+            // doc.print();
+
+            ChannelEditor2 editor = new ChannelEditor2(doc);
+            editor.setChannel(channelName);
+            editor.setCPS_ID(channelValue);
+            editor.commit();
+
+            doc.build(new FileOutputStream(outputPath));
+//            AXMLDoc doc2 = new AXMLDoc();
+//            doc2.parse(new FileInputStream("F:/myProject/channelpackage/mylib/test/vipshop/AndroidManifest.xml"));
+//            doc2.print();
+
+        }catch(Exception e){
+            e.printStackTrace();
+            return false;
+        }
+        return true;
+
+    }
+
+    public boolean writeChannelFile(String path,String channelName,String channelValue) {
+        File file = new File(path);
+        if (file.exists()) {
+            boolean deleteOk = file.deleteDir();
+            println("--------------------deleteOk=" + deleteOk);
+        }
+        File file2 = new File(path);
+        if (!file2.exists()) {
+            boolean mkOk =file2.mkdirs();
+            println("--------------------mk META-INF Ok=" + mkOk);
+        }
+        File file3=new File(path+"/vipchannel.txt");
+        file3.createNewFile();
+        file3.write(channelName + "," + channelValue, "utf-8");
+        println("--------------------createNewFile Ok");
+        return true;
+    }
+
+    public boolean deFromApk(String inputapkpath){
+        def cmd ="7z d "+inputapkpath+" META-INF AndroidManifest.xml -r"
+        def proc =cmd.execute()
+        proc.waitFor()  // 用以等待外部进程调用结束
+        String str=proc.getText();
+        println str
+        if(proc.exitValue()==0){
+            println  "zipApk OK"
+            proc.destroy()
+           return true
+        }else{
+            proc.destroy()
+            return false
+        }
+
+    }
+
+    public boolean addtoApk(String apkpath,String manifestpath){
+        def cmd ="7z a "+apkpath+" "+manifestpath
+        def proc =cmd.execute()
+        proc.waitFor()  // 用以等待外部进程调用结束
+        String str=proc.getText();
+        println str
+        if(proc.exitValue()==0){
+            proc.destroy()
+            println  "zipApk OK"
+            return true
+        }else{
+            proc.destroy()
+            return false
+        }
+
+    }
+
+    public boolean addtoApk2(String apkpath,String metapath){
+        def cmd ="7z a "+apkpath+" "+metapath;
+        def proc =cmd.execute()
+        proc.waitFor()  // 用以等待外部进程调用结束
+        String str=proc.getText();
+        println str
+        if(proc.exitValue()==0){
+            println  "zipApk OK"
+            proc.destroy()
+            return true
+        }else{
+            proc.destroy()
+            return false
+        }
+
+    }
+
+    public Map<String,FaverModule>  getChannels(String channelFilePath) {
+        Map<String,FaverModule> channelsAll=new HashMap<String,FaverModule>();
+        // 渠道号配置文件路径
+        int i=0;
+        File file=new File(channelFilePath);
+        file.eachLine { line ->
+            if(!line.startsWith("//")){ //剔除注释行
+                String[] channel= line.split(",")
+
+                if(channel.length==3){
+                    i++
+                    println("--------------------"+i+" "+line)
+                    FaverModule module=new FaverModule()
+                    module.faverName=channel[0]
+                    module.channelName=channel[1]
+                    module.channelValue=channel[2]
+                    channelsAll.put("${module.faverName}",module)
+                }else if(channel.length==2){
+                    i++
+                    println("--------------------"+i+" "+line)
+                    FaverModule module=new FaverModule()
+                    module.faverName='favername'+i
+                    module.channelName=channel[0]
+                    module.channelValue=channel[1]
+                    channelsAll.put("${module.faverName}",module)
+                }
+
+            }
+        }
+
+        return channelsAll
+    }
+    public String encoderByMd5(String str) {
+        try {
+            MessageDigest md5 = MessageDigest.getInstance("md5");
+            md5.update(str.getBytes());
+            byte[] bts = md5.digest();
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < bts.length; i++) {
+                String tmp = (Integer.toHexString(bts[i] & 0xFF));
+                if (tmp.length() == 1) {
+                    sb.append('0');
+                }
+                sb.append(tmp);
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return str;
+        }
+    }
+//   public static void (String[] args){
+//
+//        String baseDirPath=args[0];//"F:/myProject/channelpackage/mylib/test";
+//        String apkName=args[1];//"vipshop-jinli2016_8.5.10.2.1_M_V372_git_11cc04a-2016-05-06-release.apk";
+//        String channelFile=args[2];//"F:/myProject/channelpackage/mylib/test/channels.txt";
+//        channelPackage(baseDirPath,apkName,channelFile,true);
+//    }
+
+    public  void channelPackage( String baseDirPath,String apkName,String channelFile,String versionName,boolean isupdateChannel){
+        String unzipdirName="vipshop";
+        boolean delefromApk=false;
+        List<FaverModule> faverAPKChannelValueListForUpdate=new ArrayList<FaverModule>();
+
+
+//
+        boolean isUnzipOk=unzipapk(baseDirPath+"/"+apkName,baseDirPath+"/"+unzipdirName);
+        if(isUnzipOk){
+            delefromApk= deFromApk(baseDirPath+"/"+apkName);
+            println  "delefromApk OK"
+        }
+
+        if(delefromApk){
+
+            File file = new File(baseDirPath+"/apk");
+            if (!file.exists()) {
+                boolean mkOk =file.mkdirs();
+                println("--------------------mk apk dir Ok=" + mkOk);
+            }else{
+                file.deleteDir();
+                boolean mkOk =file.mkdirs();
+                println("--------------------mk apk dir Ok=" + mkOk);
+            }
+            Map<String,FaverModule> channelsAll=getChannels(channelFile);
+            channelsAll.each {
+                boolean changeManifestOk=false;
+                boolean writeFileOk=false;
+                boolean addtoApkOk=false;
+                String faverName = it.getKey();
+                String channelName = it.value.channelName;
+                String channelValue = it.value.channelValue;
+                String falver=channelName;
+                try{
+//                    String apkPartName=apkName.substring(0,apkName.lastIndexOf("-"));
+//                    try{
+//                        apkPartName=apkPartName.substring(apkPartName.indexOf("8."))
+//                    }catch (Exception e){
+//                        apkPartName=versionName;
+//                    }
+
+
+                    falver ="vipshop_"+ faverName + "_" + versionName+"_"+new Date().format("yyyy-MM-dd", TimeZone.getTimeZone("UTC"));
+                    if(isupdateChannel){
+                        String nextPartName="";
+                        try{
+                            nextPartName=apkPartName.substring(0,apkPartName.indexOf("_"));
+                        }catch (Exception e){
+                            nextPartName=versionName;
+                        }
+                        falver="shop_android_"+encoderByMd5(channelValue)+"_"+nextPartName;
+                        FaverModule temp=new FaverModule();
+                        temp.channelName=channelName;
+                        temp.channelValue=channelValue;
+                        temp.faverName=falver;
+                        faverAPKChannelValueListForUpdate.add(temp)
+                    }
+                }catch (Exception e){
+                    e.printStackTrace();
+                }
+
+
+                changeManifestOk=changeManifestWithChannel(baseDirPath+"/"+unzipdirName+"/AndroidManifest.xml",channelName,channelValue,baseDirPath+"/AndroidManifest.xml");
+                println  "changeManifest ="+changeManifestOk;
+                if(changeManifestOk){
+                    writeFileOk=writeChannelFile(baseDirPath+"/META-INF",channelName,channelValue);
+                    println  "writeFile ="+writeFileOk;
+                }
+
+                if(writeFileOk){
+                    boolean add1Ok=addtoApk(baseDirPath+"/"+apkName,baseDirPath+"/AndroidManifest.xml");
+                    boolean add2Ok=addtoApk2(baseDirPath+"/"+apkName,baseDirPath+"/META-INF");
+                    if(add1Ok&&add2Ok){
+                        addtoApkOk=true;
+                    }
+                    println  "addtoApkOk ="+addtoApkOk
+                }
+
+                if(addtoApkOk){
+                    boolean signeOk= Signe.signe(baseDirPath+"/android.keystore",baseDirPath+"/apk/"+falver+"_signed.apk",baseDirPath+"/"+apkName);
+                    println  "signe ="+signeOk;
+                }
+            }
+
+            if(isupdateChannel) {
+                File fMarkApkChannelValue = new File(baseDirPath + "/apk/apk_updateChannels.txt");
+                if (!fMarkApkChannelValue.exists()) {
+                    fMarkApkChannelValue.createNewFile();
+                }else {
+                    fMarkApkChannelValue.deleteDir();
+                    fMarkApkChannelValue.createNewFile();
+                }
+
+                def printWriter = fMarkApkChannelValue.newPrintWriter();
+                for (int i = 0; i < faverAPKChannelValueListForUpdate.size(); i++) {
+                    printWriter.println(faverAPKChannelValueListForUpdate.get(i).channelName + "," + faverAPKChannelValueListForUpdate.get(i).channelValue + "," + faverAPKChannelValueListForUpdate.get(i).faverName + ".apk");
+                }
+                printWriter.flush();
+                printWriter.close();
+            }
+
+        }
+
+
+        File file = new File(baseDirPath+"/META-INF");
+        if (file.exists()) {
+            boolean mkOk = file.deleteDir();
+            println("--------------------clear META-INF dir Ok=" + mkOk);
+        }
+
+        File file2 = new File(baseDirPath+"/vipshop");
+        if (file2.exists()) {
+            boolean mkOk =file2.deleteDir();
+            println("--------------------clear vipshop dir Ok=" + mkOk);
+        }
+
+        File file3 = new File(baseDirPath+"/AndroidManifest.xml");
+        if (file3.exists()) {
+            boolean mkOk =file3.deleteDir();
+            println("--------------------clear AndroidManifest.xml  Ok=" + mkOk);
+        }
+    }
+
+}
