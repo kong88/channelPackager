@@ -1,5 +1,7 @@
 package com.umeng.editor;
 
+import com.umeng.editor.utils.SystemUtils;
+
 import java.util.Arrays;
 import java.util.List;
 
@@ -17,6 +19,8 @@ public class Main {
         List argList = Arrays.asList(args);
         boolean batchMode = argList.contains("batchMode");
         boolean restoreSo = argList.contains("restoreSo");
+
+        System.out.println(String.format("%s, %s, %s, %s, %b, %b", baseDirPath, apkName, channelFile, versionName, batchMode, restoreSo));
 
         PackageUtil.channelPackage(baseDirPath, apkName, channelFile, versionName, batchMode, restoreSo);
     }

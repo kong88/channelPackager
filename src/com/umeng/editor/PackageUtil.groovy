@@ -1,6 +1,7 @@
 package com.umeng.editor
 
 import com.umeng.editor.decode.AXMLDoc
+import com.umeng.editor.utils.SystemUtils
 
 import java.security.MessageDigest
 
@@ -32,6 +33,7 @@ public class PackageUtil {
 
     // 执行命令行语句
     private static boolean exec(cmd) {
+        print("" + cmd + "\n")
         def proc = cmd.execute();
         proc.waitFor(); //用以等待外部进程调用结束
         println proc.getText();
@@ -196,7 +198,12 @@ public class PackageUtil {
     // 对so做4K对齐
     private static boolean zipAlign(String apkPath) {
         String tempFile = apkPath + ".2";
-        def cmd = "./zipalign -f -p 4 " + apkPath + " " + tempFile;
+        String osName = SystemUtils.getOSName();
+        def cmd = "./zipalign -f -p 4 " + apkPath + " " + tempFile;// mac or linux
+        if (osName != null && osName.toLowerCase().contains("window")) {
+            cmd = "./zipalign.exe -f -p 4 " + apkPath + " " + tempFile;// windows
+        }
+
         boolean result = exec(cmd);
         printResult("zipAlign ", result);
         if (result) {
@@ -208,8 +215,8 @@ public class PackageUtil {
         return result;
     }
 
-    private static boolean clearFiles() {
-        exec("rm -r " + CLEAR_FILES);
+    private static boolean clearFiles(String file) {
+        exec("rm -r " + file);
     }
 
     /**
@@ -223,8 +230,10 @@ public class PackageUtil {
             baseDir = System.getProperty("user.dir") + "/" + baseDir;
         }
         String apkPath = baseDir + TEMP_APK;
+
         boolean result = copyFile(baseDir + "/" + apkName, apkPath);
         if (result) {
+            clearFiles(MANIFEST_FILE)
             result = unzipManifest(apkPath);
         }
 
@@ -309,6 +318,6 @@ public class PackageUtil {
             }
         }
 
-        clearFiles();
+        clearFiles(CLEAR_FILES)
     }
 }
