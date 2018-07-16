@@ -188,9 +188,13 @@ public class PackageUtil {
 
     // 以store方式重新打包
     private static boolean storeSoFiles(String apkPath) {
-        def cmd = "unzip " + apkPath + " lib/*.so";
+        def extractString = " lib/*.so"
+        if (SystemUtils.isWindows()) {
+            extractString = " lib/*/*.so"
+        }
+        def cmd = "unzip " + apkPath + extractString;
         exec(cmd);
-        boolean result = updateApk(apkPath, "lib/*.so", true)
+        boolean result = updateApk(apkPath, extractString, true)
         printResult("storeSoFiles ", result);
         return result;
     }
